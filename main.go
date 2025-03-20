@@ -154,6 +154,8 @@ func main() {
 		return
 	}
 
+	// код ниже не выполнится, тк `service.PrintClientParcels(client)` вернет err
+
 	// регистрация новой посылки
 	p, err = service.Register(client, address)
 	if err != nil {
