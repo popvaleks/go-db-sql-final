@@ -3,6 +3,7 @@ package main
 import (
 	"database/sql"
 	"errors"
+	"fmt"
 	_ "modernc.org/sqlite"
 )
 
@@ -73,40 +74,53 @@ func (s ParcelStore) GetByClient(client int) ([]Parcel, error) {
 }
 
 func (s ParcelStore) SetStatus(number int, status string) error {
-	// реализуйте обновление статуса в таблице parcel
+	_, err := s.db.Exec("UPDATE parcel SET status = :status WHERE number = :number",
+		sql.Named("status", status),
+		sql.Named("number", number),
+	)
 
-	return nil
-}
-
-func (s ParcelStore) isRegistered(number int) (bool, error) {
-	row := s.db.QueryRow("SELECT status FROM parcel WHERE number = :number", sql.Named("number", number))
-
-	var status string
-
-	err := row.Scan(&status)
-	if err != nil {
-		return false, err
-	}
-
-	if status != ParcelStatusRegistered {
-		return false, errors.New("parcel status must be registered")
-	}
-
-	return true, nil
-}
-
-func (s ParcelStore) SetAddress(number int, address string) error {
-	_, err := s.isRegistered(number)
 	if err != nil {
 		return err
 	}
 
-	_, err = s.db.Exec("UPDATE parcel SET address = :address WHERE number = :number",
+	return nil
+}
+
+func (s ParcelStore) shouldChangeError(number int, result sql.Result, err error) error {
+	if err != nil {
+		return err
+	}
+
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return err
+	}
+
+	if rowsAffected == 0 {
+		row := s.db.QueryRow("SELECT number FROM parcel WHERE number = :number", sql.Named("number", number))
+
+		var resNumber int
+		err = row.Scan(&resNumber)
+
+		if err != nil {
+			return errors.New(fmt.Sprintf("parcel %d not found", number))
+		}
+
+		return errors.New(fmt.Sprint("parcel status must be ", ParcelStatusRegistered))
+	}
+
+	return err
+}
+
+func (s ParcelStore) SetAddress(number int, address string) error {
+	result, err := s.db.Exec("UPDATE parcel SET address = :address WHERE number = :number AND status = :status",
 		sql.Named("number", number),
 		sql.Named("address", address),
+		sql.Named("status", ParcelStatusRegistered),
 	)
-	// реализуйте обновление адреса в таблице parcel
-	// менять адрес можно только если значение статуса registered
+
+	err = s.shouldChangeError(number, result, err)
+
 	if err != nil {
 		return err
 	}
@@ -115,15 +129,13 @@ func (s ParcelStore) SetAddress(number int, address string) error {
 }
 
 func (s ParcelStore) Delete(number int) error {
-	_, err := s.isRegistered(number)
-	if err != nil {
-		return err
-	}
-	// реализуйте удаление строки из таблицы parcel
-	// удалять строку можно только если значение статуса registered
-	_, err = s.db.Exec("DELETE from parcel WHERE number = :number", sql.Named("number", number))
-	// реализуйте обновление адреса в таблице parcel
-	// менять адрес можно только если значение статуса registered
+	result, err := s.db.Exec("DELETE from parcel WHERE number = :number AND status = :status",
+		sql.Named("number", number),
+		sql.Named("status", ParcelStatusRegistered),
+	)
+
+	err = s.shouldChangeError(number, result, err)
+
 	if err != nil {
 		return err
 	}
