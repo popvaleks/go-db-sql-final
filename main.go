@@ -105,7 +105,6 @@ func main() {
 	}
 
 	store := NewParcelStore(db)
-
 	service := NewParcelService(store)
 
 	// регистрация посылки
